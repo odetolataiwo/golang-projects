@@ -22,7 +22,7 @@ var userCollection *mongo.Collection = database.OpenCollection(database.Client, 
 var validate = validator.New()
 
 func HashPassword(password string) string {
-	bcrypt.GenerateFromPassword([]byte(password), 14)
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -137,7 +137,7 @@ func Login()  gin.HandlerFunc{
 
 func GetUsers() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		helper.CheckUserType(c, "ADMIN"); err != nil {
+		if err:= helper.CheckUserType(c, "ADMIN"); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()})
 			return
 		}
@@ -159,15 +159,12 @@ func GetUsers() gin.HandlerFunc {
 		groupStage := bson.D{{"$group", bson.D{
 			{"_id", "null"}}},
 			{"total_count", bson.D{{"$sum", 1}}},
-			{"data", bson.D{{"$push", "$$ROOT"}}}
-		}}}
+			{"data", bson.D{{"$push", "$$ROOT"}}}}}}
 		projectStage := bson.D{
 			{"$project", bson.D{
 				{"_id", 0},
 				{"total_count", 1},
-				{"user_items", bson.D{{"$slice", interface{}{"$data", startIndex, recordPerPage}}}}},
-			}}
-		}
+				{"user_items", bson.D{{"$slice", interface{}{"$data", startIndex, recordPerPage}}}}}}}}
 
 result, err := userCollectiom.Aggregrate(ctx, mongo.Pipeline{
 	matchStage, groupStage, projectStage
@@ -176,11 +173,11 @@ result, err := userCollectiom.Aggregrate(ctx, mongo.Pipeline{
 defer cancel()
 
 if err != nil {
-	c.JSON{http.StatusInternalServerError, gin.H{"error":"error occurred while listing user items"}
+	c.JSON(http.StatusInternalServerError, gin.H{"error":"error occurred while listing user items"})
 }
 
-var allUsers []bson.M
-if err != result.All(ctx, &allusers); err != nil {
+var allusers []bson.M
+if err = result.All(ctx, &allusers); err != nil {
 	log.Fatal(err)
 }
 c.JSON(http.StatusOK, allusers[0])
