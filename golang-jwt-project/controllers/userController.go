@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -21,7 +22,7 @@ var userCollection *mongo.Collection = database.OpenCollection(database.Client, 
 var validate = validator.New()
 
 func HashPassword(password string) string {
-	bcrypt.GenerateFromPassword([]byte(password), 14)
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -134,8 +135,53 @@ func Login()  gin.HandlerFunc{
 	}
 }
 
-func GetUsers(){
+func GetUsers() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err:= helper.CheckUserType(c, "ADMIN"); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()})
+			return
+		}
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
+		recordPerPage, err := strconv.Attoi(c.Query("recordPerPage"))
+		if err != nil || recordPerPage < 1 {
+			recordPerPage = 10
+		}
+		page, err1 := strconv.Atoi(c.Query("page"))
+		if err1 != nil || page < 1{
+			page = 1
+		}
+
+		startIndex := (page - 1) * recordPerPage
+		startIndex, err = strconv.Atoi(c.Query("startIndex"))
+
+		matchStage := bson.D{{"$match", bson.D{{}}}}
+		groupStage := bson.D{{"$group", bson.D{
+			{"_id", "null"}}},
+			{"total_count", bson.D{{"$sum", 1}}},
+			{"data", bson.D{{"$push", "$$ROOT"}}}}}}
+		projectStage := bson.D{
+			{"$project", bson.D{
+				{"_id", 0},
+				{"total_count", 1},
+				{"user_items", bson.D{{"$slice", interface{}{"$data", startIndex, recordPerPage}}}}}}}}
+
+result, err := userCollectiom.Aggregrate(ctx, mongo.Pipeline{
+	matchStage, groupStage, projectStage
+})
+
+defer cancel()
+
+if err != nil {
+	c.JSON(http.StatusInternalServerError, gin.H{"error":"error occurred while listing user items"})
+}
+
+var allusers []bson.M
+if err = result.All(ctx, &allusers); err != nil {
+	log.Fatal(err)
+}
+c.JSON(http.StatusOK, allusers[0])
+	}
 }
 
 func GetUser()  gin.HandlerFunc{
